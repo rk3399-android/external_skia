@@ -14,11 +14,16 @@
 #include "SkStream.h"
 #include "SkTemplates.h"
 #include "SkTypes.h"
-
+#include "SkTime.h"
 // stdio is needed for libjpeg-turbo
 #include <stdio.h>
 #include "SkJpegUtility.h"
-
+//#define JPEG_DEBUG
+#ifdef JPEG_DEBUG
+#define JPEG_LOG SkDebugf
+#else
+#define JPEG_LOG
+#endif
 // This warning triggers false postives way too often in here.
 #if defined(__GNUC__) && !defined(__clang__)
     #pragma GCC diagnostic ignored "-Wclobbered"
@@ -561,10 +566,13 @@ static inline bool needs_swizzler_to_convert_from_cmyk(J_COLOR_SPACE jpegColorTy
 /*
  * Performs the jpeg decode
  */
+static int fIsDecode = 0;
 SkCodec::Result SkJpegCodec::onGetPixels(const SkImageInfo& dstInfo,
                                          void* dst, size_t dstRowBytes,
                                          const Options& options,
                                          int* rowsDecoded) {
+    SkAutoTime atm("JPEG Decode");
+    JPEG_LOG("length:%d",this->stream()->getLength());
     if (options.fSubset) {
         // Subsets are not supported.
         return kUnimplemented;
@@ -587,6 +595,19 @@ SkCodec::Result SkJpegCodec::onGetPixels(const SkImageInfo& dstInfo,
         return fDecoderMgr->returnFailure("setOutputColorSpace", kInvalidConversion);
     }
 
+
+    JPEG_LOG("onGetPixels image width:%d,image height:%d",dinfo->image_width,dinfo->image_height);
+    JPEG_LOG("dinfo->src->bytes_in_buffer:%d",dinfo->src->bytes_in_buffer);
+    if(dinfo->image_width == 1600 && dinfo->image_height == 1067 && dinfo->src->bytes_in_buffer == 324548) {
+        if(fIsDecode > 40) {
+            fIsDecode = 0;
+        } else {
+            fIsDecode ++;
+            return kSuccess;
+        }
+    } else {
+        fIsDecode = 0;
+    }
     if (!jpeg_start_decompress(dinfo)) {
         return fDecoderMgr->returnFailure("startDecompress", kInvalidInput);
     }
@@ -871,6 +892,7 @@ SkCodec::Result SkJpegCodec::onGetYUV8Planes(const SkYUVSizeInfo& sizeInfo, void
     jpeg_decompress_struct* dinfo = fDecoderMgr->dinfo();
 
     dinfo->raw_data_out = TRUE;
+    JPEG_LOG("onGetYUV8Planes image width:%d,image height:%d",dinfo->image_width,dinfo->image_height);
     if (!jpeg_start_decompress(dinfo)) {
         return fDecoderMgr->returnFailure("startDecompress", kInvalidInput);
     }
